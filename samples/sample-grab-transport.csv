@@ -1,0 +1,13 @@
+Company,DEMO COMPANY PTE. LTD.
+Date & Time of Generation,Mon 05 Oct 2026 21:00:00 (GMT+8)
+Booking Type,Company bookings
+Date Range,01 Sep 2026 - 30 Sep 2026
+Bookings,5
+Total Amount,sample
+,
+No.,Date & Time (GMT+8),Employee Name,Employee ID,Employee Group,Service Type,Payment Method,Pick-Up Address,Intermediate Stop,Drop-Off Address,Booking ID,City,Distance,Booking Source,Trip / Cost Code,Trip Description,Pick-Up Date & Time,Drop-Off Date & Time,Payment Status,Payment Details,Currency,Base Fare,Promo,Booking Fee,Tolls,Late Fee,Other Fees,Total Fare,Revised Total (After Refund),Booking Type
+1,02 Sep 2026 09:10:00 AM,Maria Santos,-,General,Car,Corporate Credit Card,"1 Sample St, Jakarta",-,"2 Example Ave, Jakarta",A-TESTRIDE0001AV,Jakarta,5.0,IOS,-,-,02 Sep 2026 09:10:00 AM,02 Sep 2026 09:10:00 AM,Success,"Corporate Credit Card, MasterCard 1521",IDR,40000,0,2000,0,0,0,42000,42000,On-demand
+2,03 Sep 2026 06:30:00 PM,Juan Cruz,-,General,Car,Corporate Credit Card,Airport Terminal 3,-,"Hotel Demo, Jakarta",A-TESTRIDE0002AV,Jakarta,5.0,IOS,-,-,03 Sep 2026 06:30:00 PM,03 Sep 2026 06:30:00 PM,Success,"Corporate Credit Card, MasterCard 1521",IDR,180000,0,5000,15000,0,0,200000,200000,On-demand
+3,05 Sep 2026 11:00:00 AM,Ana Reyes,-,General,Car,Corporate Credit Card,"10 Sample Rd, Kuala Lumpur",-,"20 Demo Jln, Kuala Lumpur",A-TESTRIDE0003AV,Kuala Lumpur,5.0,IOS,-,-,05 Sep 2026 11:00:00 AM,05 Sep 2026 11:00:00 AM,Success,"Corporate Credit Card, MasterCard 1521",MYR,22.5,0,1.5,0,0,0,24.0,24.0,On-demand
+4,06 Sep 2026 08:00:00 AM,Juan Cruz,-,General,Car,Personal,"5 Test St, Singapore",-,"6 Mock Rd, Singapore",A-TESTRIDE0004AV,Singapore,5.0,IOS,-,-,06 Sep 2026 08:00:00 AM,06 Sep 2026 08:00:00 AM,Success,"Personal, Visa 0000",SGD,14,0,0.8,0,0,0,14.8,14.8,On-demand
+5,28 Sep 2026 07:45:00 PM,Maria Santos,-,General,Car,Corporate Credit Card,"1 Sample St, Jakarta",-,"Office Demo, Jakarta",A-TESTRIDE0005AV,Jakarta,5.0,IOS,-,-,28 Sep 2026 07:45:00 PM,28 Sep 2026 07:45:00 PM,Success,"Corporate Credit Card, MasterCard 1521",IDR,30000,0,2000,0,0,0,32000,32000,On-demand

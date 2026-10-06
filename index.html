@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Grab Receipts Matcher</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+</head>
+<body>
+  <main>
+    <header>
+      <h1>Grab Receipts Matcher</h1>
+      <p class="sub">Drop your Grab for Business export and your Brex export. You get a PDF for every trip and one sorted masterlist with booking IDs, QuickBooks links and Brex links. Everything runs in your browser, so no file leaves your computer.</p>
+    </header>
+
+    <details class="sessions" id="sessions">
+      <summary>Saved sessions <span class="muted">(reopen a past matching and see what was already uploaded)</span></summary>
+      <ul class="session-list" id="session-list"></ul>
+      <label class="import-link">Import a session file…<input type="file" id="import-session" accept=".json,application/json" hidden></label>
+    </details>
+
+    <section class="drops">
+      <div class="drop-col">
+        <label class="drop" id="drop-grab">
+          <input type="file" id="file-grab" accept=".csv,.xlsx,.xls" multiple>
+          <span class="step">1</span>
+          <strong>Grab for Business exports</strong>
+          <span class="hint">Add every category export (Transport, Food, Express...). Each file you drop or pick is added to the list, and the category comes from the file name.</span>
+          <span class="status" id="status-grab">No file yet</span>
+        </label>
+        <ul class="file-list" id="grab-files"></ul>
+      </div>
+      <label class="drop" id="drop-brex">
+        <input type="file" id="file-brex" accept=".csv,.xlsx,.xls">
+        <span class="step">2</span>
+        <strong>Brex accounting export</strong>
+        <span class="hint">Optional. Leave it empty to get the PDFs and masterlist only.</span>
+        <span class="status" id="status-brex">No file yet</span>
+      </label>
+    </section>
+
+    <details id="mapping" hidden>
+      <summary>Brex column mapping <span class="muted">(detected automatically, so change it only if something looks wrong)</span></summary>
+      <div class="map-grid" id="map-grid"></div>
+    </details>
+
+    <details>
+      <summary>Settings</summary>
+      <div class="settings">
+        <label>Brex link template <input id="link-tpl" value="https://dashboard.brex.com/expenses/{id}">
+          <span class="hint">Only used if the Brex file has no "Created From URL" column. <code>{id}</code> is replaced with the ID.</span></label>
+        <label>Date window (days) <input id="win" type="number" value="2" min="0" max="60">
+          <span class="hint">Only used for Brex charges without a booking ID in the statement descriptor. The most days apart a trip and a charge can be and still match.</span></label>
+      </div>
+    </details>
+
+    <div class="actions">
+      <button id="run" disabled>Match &amp; generate</button>
+      <span id="msg" class="muted"></span>
+    </div>
+
+    <section id="results" hidden>
+      <div class="results-bar">
+        <div class="chips" id="chips"></div>
+        <div class="track">
+          <span id="up-progress" class="up-progress"></span>
+          <label class="inline"><input type="checkbox" id="hide-up"> Hide uploaded</label>
+        </div>
+      </div>
+      <div class="actions">
+        <button id="dl-xlsx">Download masterlist (.xlsx)</button>
+        <button id="dl-zip" class="secondary">Download all receipt PDFs (.zip)</button>
+        <span class="spacer"></span>
+        <span id="save-state" class="muted save-state"></span>
+        <button id="save-session" class="secondary">Save session</button>
+      </div>
+      <div class="table-wrap"><table id="table"></table></div>
+    </section>
+  </main>
+  <dialog id="save-dlg">
+    <h3>Save this session</h3>
+    <p class="muted">Keeps the Grab and Brex files, your settings and the upload ticks in this browser, so you can reopen it later from "Saved sessions". Use Export there to keep a copy as a file.</p>
+    <label>Name<input id="save-name" maxlength="80"></label>
+    <div class="actions">
+      <button type="button" value="ok">Save</button>
+      <button type="button" value="cancel" class="secondary">Cancel</button>
+    </div>
+  </dialog>
+  <dialog id="rerun">
+    <h3>Run matching again?</h3>
+    <p class="muted">This replaces the current results with a new run using your current files, column mapping, card filter and settings. Download the masterlist first if you want to keep it.</p>
+    <div class="actions">
+      <button type="button" value="ok">Yes, run again</button>
+      <button type="button" value="cancel" class="secondary">Cancel</button>
+    </div>
+  </dialog>
+  <script src="match.js"></script>
+  <script src="receipt.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

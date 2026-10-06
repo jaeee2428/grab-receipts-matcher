@@ -1,0 +1,11 @@
+Company,DEMO COMPANY PTE. LTD.
+Date & Time of Generation,Mon 05 Oct 2026 22:00:00 (GMT+8)
+Order Type,Company orders
+Date Range,01 Sep 2026 - 30 Sep 2026
+Orders,2
+Company Pays,sample
+Employee Pays,-
+,
+No.,Date & Time (GMT+8),Employee Name,Employee ID,Employee Email,Employee Group,Service Type,Payment Method,Merchant,Pick-Up Address,Delivery Address,Booking / Order ID,City,Distance,Order Status,Order Source,Order / Cost Code,Order Description,Order Date & Time (GMT+8),Order Completion Date & Time (GMT+8),Delivered By,Recipient Name,Items,Promo Code,Payment Status,Payment Details,Currency,Subtotal,Promo Amount,Parking Fee,Delivery Fee,Platform & Partner Fee,Small Order Fee,Other Fees,Total,Company Pays,Employee Pays,Revised Total (After Refund),Revised Company Pays (After Refund),Revised Employee Pays (After Refund),Tips
+1,07 Sep 2026 07:30:00 PM,Ana Reyes,-,demo@example.com,General,GrabFood,Corporate Credit Card,Demo Noodle House,"Demo Noodle House, Kuala Lumpur","30 Demo Residence, Kuala Lumpur",A-TESTFOOD0001AV,Klang Valley,3.0,Completed,App,-,-,07 Sep 2026 07:30:00 PM,07 Sep 2026 07:30:00 PM,-,Ana Reyes,"[{""item"":""Chicken Rice"",""price"":""18.5"",""quantity"":""1""}]",-,Success,"[""Corporate Credit Card, MasterCard 1521""]",MYR,18.5,0,0,3.0,0,0,0.5,22.0,22.0,-,22.0,22.0,-,0
+2,08 Sep 2026 12:15:00 PM,Ana Reyes,-,demo@example.com,General,GrabFood,Corporate Credit Card,Sample Burger Bar,"Sample Burger Bar, Kuala Lumpur","30 Demo Residence, Kuala Lumpur",A-TESTFOOD0002AV,Klang Valley,3.0,Completed,App,-,-,08 Sep 2026 12:15:00 PM,08 Sep 2026 12:15:00 PM,-,Ana Reyes,"[{""item"":""Burger Set"",""price"":""25"",""quantity"":""1""}]",-,Success,"[""Corporate Credit Card, MasterCard 1521""]",MYR,25,0,0,3.5,0,0,0.6,29.1,29.1,-,26.0,26.0,-,0

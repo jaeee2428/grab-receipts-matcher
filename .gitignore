@@ -1,0 +1,8 @@
+# macOS
+.DS_Store
+# never commit real exports or saved sessions (financial data)
+*.grab-session.json
+*.xlsx
+Brex_Transactions_*.csv
+*_Transport_*.csv
+*_Food_*.csv
