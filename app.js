@@ -117,6 +117,9 @@
     if (!opts.quiet) $('results').scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
 
+  // matched charges that already exist in QuickBooks (they have an ERP link): memo, GL, class and receipt are added there by hand or in a Claude session
+  function isQbTodo(r) { return !!(r._b && r['Integration ERP'] && ['Matched', 'Split charge', 'Combined charge'].includes(r.Status)); }
+
   const statusClass = s => ['Matched', 'Receipt only'].includes(s) ? 's-ok'
     : ['Split charge', 'Combined charge'].includes(s) ? 's-split'
     : ['Unmatched Brex', 'Unmatched Grab'].includes(s) ? 's-bad'
@@ -154,15 +157,16 @@
   };
   function renderResults() {
     const counts = state.matches.reduce((c, m) => ((c[m.type] = (c[m.type] || 0) + 1), c), {}); // per match, not per row
-    $('chips').innerHTML = [['All', state.matches.length], ...Object.entries(counts)].map(([k, v]) =>
-      `<span class="chip ${k === 'All' ? 's-all' : statusClass(k)} ${state.filter === k ? 'active' : ''}" data-k="${esc(k)}">${esc(k)}: ${v}</span>`).join('');
+    const qbTodo = state.rows.filter(isQbTodo).length;
+    $('chips').innerHTML = [['All', state.matches.length], ...Object.entries(counts), ...(qbTodo ? [['QuickBooks to-do', qbTodo]] : [])].map(([k, v]) =>
+      `<span class="chip ${k === 'All' ? 's-all' : k === 'QuickBooks to-do' ? 's-split' : statusClass(k)} ${state.filter === k ? 'active' : ''}" data-k="${esc(k)}">${esc(k)}: ${v}</span>`).join('');
     $('chips').querySelectorAll('.chip').forEach(c => (c.onclick = () => { state.filter = c.dataset.k; renderResults(); }));
     renderProgress();
 
     const cols = visibleCols(state.rows);
     const linkCell = v => v ? v.split(' | ').map(u => `<a href="${esc(u)}" target="_blank" rel="noopener">open</a>`).join(' · ') : '';
     const rows = state.rows
-      .filter(r => state.filter === 'All' || r.Status === state.filter)
+      .filter(r => state.filter === 'All' || (state.filter === 'QuickBooks to-do' ? isQbTodo(r) : r.Status === state.filter))
       .filter(r => !(state.hideUploaded && isUp(r)));
     const body = rows.map(r => {
       const i = r._m, key = rowKey(r), up = isUp(r);
@@ -382,19 +386,28 @@
     return m ? m[1] : '';
   }
   function downloadQbList() {
-    const rows = state.rows.filter(r => r._b && r['Integration ERP'] && PUSHABLE.has(r.Status)).map(r => ({
-      'QuickBooks ID': qbTxnId(r['Integration ERP']),
-      'QuickBooks link': r['Integration ERP'],
-      Date: r.Date,
-      Amount: r['Purchased Amount'],
-      Currency: r['Purchased Currency'],
-      Memo: r.Memo,
-      'GL Account': r['GL Account'],
-      Class: r.Class,
-      'Receipt PDF': r['Receipt PDF'],
-      'Brex Dashboard': r['Brex Dashboard'],
-      'Pushed to Brex': isUp(r) ? 'yes' : 'no'
-    }));
+    const norm = v => String(v || '').replace(/^\[|\]$/g, '').trim().toLowerCase();
+    const rows = state.rows.filter(r => r._b && r['Integration ERP'] && PUSHABLE.has(r.Status)).map(r => {
+      const glNow = r['Current Brex GL'], clsNow = r._b.cls || '';
+      const glFix = norm(r['GL Account']) !== norm(glNow), clsFix = norm(r.Class) !== norm(clsNow);
+      return {
+        'QuickBooks ID': qbTxnId(r['Integration ERP']),
+        'QuickBooks link': r['Integration ERP'],
+        Date: r.Date,
+        Amount: r['Purchased Amount'],
+        Currency: r['Purchased Currency'],
+        Memo: r.Memo,
+        'Target GL': r['GL Account'],
+        'Current GL': glNow,
+        'Fix GL?': glFix ? 'yes' : 'no',
+        'Target Class': r.Class,
+        'Current Class': clsNow,
+        'Fix Class?': clsFix ? 'yes' : 'no',
+        'Receipt PDF': r['Receipt PDF'],
+        'Brex Dashboard': r['Brex Dashboard'],
+        'Pushed to Brex': isUp(r) ? 'yes' : 'no'
+      };
+    });
     if (!rows.length) return alert('No matched charges with a QuickBooks (ERP) link in these results.');
     const ws = XLSX.utils.json_to_sheet(rows);
     const wb = XLSX.utils.book_new();
