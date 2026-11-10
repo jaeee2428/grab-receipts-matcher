@@ -6,3 +6,12 @@
 Brex_Transactions_*.csv
 *_Transport_*.csv
 *_Food_*.csv
+# secrets: the Brex token and app password live ONLY in Vercel environment variables, never in the repo
+.env
+.env.*
+*.env
+.vercel
+*.pem
+*.key
+secrets.*
+*token*

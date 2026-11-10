@@ -144,6 +144,14 @@
   }
 
   /* ---------- Results table ---------- */
+  // Brex Dashboard link comes first; the QuickBooks (ERP) column only exists if at least one row has an ERP link
+  const visibleCols = rows => {
+    let cols = Object.keys(rows[0] || {});
+    if (!rows.some(r => r['Integration ERP'])) cols = cols.filter(c => c !== 'Integration ERP');
+    const i = cols.indexOf('Brex Dashboard'), j = cols.indexOf('Integration ERP');
+    if (i > -1 && j > -1 && i > j) { cols.splice(i, 1); cols.splice(j, 0, 'Brex Dashboard'); }
+    return cols;
+  };
   function renderResults() {
     const counts = state.matches.reduce((c, m) => ((c[m.type] = (c[m.type] || 0) + 1), c), {}); // per match, not per row
     $('chips').innerHTML = [['All', state.matches.length], ...Object.entries(counts)].map(([k, v]) =>
@@ -151,7 +159,7 @@
     $('chips').querySelectorAll('.chip').forEach(c => (c.onclick = () => { state.filter = c.dataset.k; renderResults(); }));
     renderProgress();
 
-    const cols = Object.keys(state.rows[0] || {});
+    const cols = visibleCols(state.rows);
     const linkCell = v => v ? v.split(' | ').map(u => `<a href="${esc(u)}" target="_blank" rel="noopener">open</a>`).join(' · ') : '';
     const rows = state.rows
       .filter(r => state.filter === 'All' || r.Status === state.filter)
@@ -350,8 +358,8 @@
     const local = iso => { const d = new Date(iso), p = n => String(n).padStart(2, '0');
       return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`; };
     const rows = state.rows.map(r => ({ Uploaded: isUp(r) ? local(state.uploaded[rowKey(r)]) : '', ...r }));
-    const ws = XLSX.utils.json_to_sheet(rows);
-    const cols = Object.keys(rows[0] || {});
+    const cols = ['Uploaded', ...visibleCols(state.rows)];
+    const ws = XLSX.utils.json_to_sheet(rows, { header: cols });
     // make single-URL link cells clickable
     cols.forEach((c, ci) => {
       if (!LINK_COLS.has(c)) return;
@@ -408,6 +416,119 @@
     $('rerun').close();
     if (b.value === 'ok') run();
   }));
+
+  /* ---------- Push to Brex (through the /api/brex Vercel function, which holds the token) ---------- */
+  const PUSHABLE = new Set(['Matched', 'Split charge', 'Combined charge']); // Review rows are never pushed
+  const needsMemo = r => !String(r._b.memo || '').trim();
+  const needsReceipt = r => !String(r._b.receipt || '').trim() && r._b.amount > 0;
+  // only charges that are missing a memo or a receipt; whatever Brex already has is never touched
+  const pushable = () => state.rows.filter(r => r._b && r._b.id && PUSHABLE.has(r.Status) && r.Memo && !isUp(r) && (needsMemo(r) || needsReceipt(r)));
+  const PUSH_URL = 'https://belli.app.n8n.cloud/webhook/grab-brex-push'; // n8n workflow "Grab Receipts: Push to Brex" holds the Brex token
+  let pushPw = ''; // kept in memory only: gone on reload, never saved
+  const b64 = buf => { let s = ''; const u = new Uint8Array(buf); for (let i = 0; i < u.length; i += 0x8000) s += String.fromCharCode.apply(null, u.subarray(i, i + 0x8000)); return btoa(s); };
+
+  async function brexApi(body) {
+    let r;
+    try {
+      r = await fetch(PUSH_URL, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': pushPw }, body: JSON.stringify(body) });
+    } catch (e) { throw new Error('Could not reach n8n (check the workflow is published and the site origin is allowed)'); }
+    const j = await r.json().catch(() => ({}));
+    if (r.status === 404) throw Object.assign(new Error('Push webhook not found. Is the n8n workflow published?'), { status: 404 });
+    if (r.status === 403) throw Object.assign(new Error('Wrong password'), { status: 401 });
+    if (!r.ok) throw Object.assign(new Error(j.error || j.message || `HTTP ${r.status}`), { status: r.status });
+    return j;
+  }
+
+  async function pushOne(r) {
+    const m = state.matches[r._m];
+    const receipts = r._b.amount > 0 ? m.grabs.map(g => ({ name: R.receiptFileName(g), pdfBase64: b64(R.buildReceipt(g).output('arraybuffer')) })) : [];
+    return brexApi({ action: 'push', expenseId: r._b.id, memo: r.Memo, receipts });
+  }
+
+  function openPush() {
+    const dlg = $('push-dlg'), body = $('push-body'), actions = $('push-actions');
+    const setActions = list => {
+      actions.innerHTML = list.map(([label, id, cls]) => `<button type="button" id="${id}" class="${cls || ''}">${label}</button>`).join('');
+      return id => $(id);
+    };
+    const close = () => { dlg.close(); };
+    let running = false;
+
+    const askPassword = (err) => {
+      body.innerHTML = `<p class="muted">Enter the app password (set in Vercel as <code>APP_PASSWORD</code>). It is only kept until you reload the page.</p>
+        <label>Password<input id="push-pw" type="password" autocomplete="current-password"></label>${err ? `<p class="push-warn">${esc(err)}</p>` : ''}`;
+      setActions([['Continue', 'push-go'], ['Cancel', 'push-cancel', 'secondary']]);
+      $('push-cancel').onclick = close;
+      const go = async () => {
+        pushPw = $('push-pw').value;
+        if (!pushPw) return $('push-pw').focus();
+        try { await brexApi({ action: 'ping' }); preview(); }
+        catch (e) { pushPw = ''; askPassword(e.status === 401 ? 'Wrong password.' : e.message); }
+      };
+      $('push-go').onclick = go;
+      $('push-pw').onkeydown = e => { if (e.key === 'Enter') go(); };
+      $('push-pw').focus();
+    };
+
+    const preview = async () => {
+      const rows = pushable();
+      const skipped = state.rows.filter(r => r._b && !rows.includes(r));
+      const reviewN = skipped.filter(r => !PUSHABLE.has(r.Status) && !isUp(r)).length;
+      if (!rows.length) {
+        body.innerHTML = '<p>Nothing to push: no matched Brex charges are left without a tick.</p>';
+        setActions([['Close', 'push-cancel', 'secondary']]); $('push-cancel').onclick = close; return;
+      }
+      const first = rows[0];
+      body.innerHTML = `<p><strong>${rows.length}</strong> matched charge${rows.length === 1 ? '' : 's'} are missing a memo or a receipt and will get them from here${reviewN ? `. ${reviewN} Review/other rows are skipped.` : '.'}</p>
+        <p class="hint">Only missing things are written. A memo or receipt Brex already has is left alone, and nothing is deleted.</p>
+        <p class="hint">Class and GL account are not part of the Brex API (they come from QuickBooks), so copy those by hand.</p>
+        <div id="push-first" class="muted">Reading the first charge from Brex…</div>`;
+      setActions([['Test with 1 charge', 'push-one'], [`Push all ${rows.length}`, 'push-all', 'secondary'], ['Cancel', 'push-cancel', 'secondary']]);
+      $('push-cancel').onclick = close;
+      $('push-one').onclick = () => run(rows.slice(0, 1));
+      $('push-all').onclick = () => run(rows);
+      try {
+        const cur = await brexApi({ action: 'get', expenseId: first._b.id });
+        $('push-first').innerHTML = `<div class="push-cmp"><b>Charge</b><span>${esc(first.Date)} · ${esc(first['Purchased Amount'])} ${esc(first['Purchased Currency'])}</span>
+          <b>Memo now</b><span>${esc(cur.memo) || '<em>empty</em>'}</span><b>New memo</b><span>${cur.memo ? '<em>kept (already has one)</em>' : esc(first.Memo)}</span><b>Receipt</b><span>${cur.receipts ? '<em>already has one, skipped</em>' : esc(first['Receipt PDF'])}</span></div>`;
+      } catch (e) {
+        $('push-first').innerHTML = `<p class="push-warn">${esc(e.message)}</p>`;
+      }
+    };
+
+    const run = async rows => {
+      running = true;
+      body.innerHTML = `<p id="push-st">Pushing 0 of ${rows.length}…</p><div class="push-bar"><span id="push-fill"></span></div><ul class="push-log" id="push-log"></ul>`;
+      setActions([['Stop', 'push-stop', 'secondary']]);
+      let stop = false, ok = 0, fail = 0;
+      $('push-stop').onclick = () => { stop = true; $('push-stop').disabled = true; };
+      const log = (cls, t) => { $('push-log').insertAdjacentHTML('afterbegin', `<li class="${cls}">${esc(t)}</li>`); };
+      for (let i = 0; i < rows.length && !stop; i++) {
+        const r = rows[i];
+        try {
+          const res = await pushOne(r);
+          toggleUploaded(rowKey(r), true);
+          ok++;
+          log('ok', `✓ ${r.Date} ${r['Purchased Amount']} ${r['Purchased Currency']}: memo ${res.memo}, ${res.receiptSkipped ? 'receipt already there' : res.receipts + ' receipt' + (res.receipts === 1 ? '' : 's') + ' added'}`);
+        } catch (e) {
+          fail++;
+          log('err', `✗ ${r.Date} ${r['Purchased Amount']} ${r['Purchased Currency']}: ${e.message}`);
+          if (e.status === 401 || e.status === 404 || e.status === 503) { stop = true; break; } // won't get better by retrying the next row
+        }
+        $('push-st').textContent = `Pushing ${ok + fail} of ${rows.length}…`;
+        $('push-fill').style.width = `${((ok + fail) / rows.length) * 100}%`;
+      }
+      running = false;
+      $('push-st').textContent = `Done: ${ok} pushed${fail ? `, ${fail} failed (left unticked)` : ''}${stop && ok + fail < rows.length ? ', stopped early' : ''}.`;
+      setActions([['Close', 'push-cancel']]); $('push-cancel').onclick = () => { close(); renderResults(); };
+    };
+
+    dlg.onclose = () => { if (!running) renderResults(); };
+    dlg.showModal();
+    pushPw ? preview() : askPassword();
+  }
+  $('push-brex').onclick = openPush;
+
   $('dl-xlsx').onclick = downloadXlsx;
   $('dl-zip').onclick = downloadZip;
   $('hide-up').onchange = e => { state.hideUploaded = e.target.checked; renderResults(); };

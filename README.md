@@ -46,3 +46,10 @@ Static site, no build step: on Vercel, import the GitHub repo with the framework
 
 ## Where data is stored
 Nothing is uploaded anywhere. Saved sessions and upload ticks live in the browser (IndexedDB, with localStorage as a fallback), per browser and per site address. Use **Export / Import** in "Saved sessions" to move them between browsers, or from the local site to the deployed one.
+
+## Push to Brex (through n8n)
+**Push to Brex…** sends each matched charge to the n8n workflow **Grab Receipts: Push to Brex** (`https://belli.app.n8n.cloud/webhook/grab-brex-push`). n8n holds the Brex token in its own credential, so **no secret lives in this repo or on Vercel**. The workflow writes a memo and uploads the receipt PDF only when the expense has none. It never overwrites or deletes. Class and GL account are not in the Brex API, so they stay copy-and-paste.
+- The page asks for the webhook password once per page load (header `Authorization`, an n8n Header Auth credential whose value is the password). It is kept in memory only.
+- Only Matched, Split and Combined rows are pushed; Review rows never are. Use "Test with 1 charge" first.
+- **Never commit a token or password.** `.gitignore` blocks `.env*`, `*token*`, keys and `.vercel`. The repo is public.
+- `vercel.json` adds security headers (CSP allows only this site, cdnjs and the n8n host).
