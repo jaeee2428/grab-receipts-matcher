@@ -156,7 +156,7 @@
       </tr>`;
     }).join('');
     $('table').innerHTML = `<caption style="text-align:left;padding:8px 12px"><strong>${done}</strong> of ${rows.length} done in QuickBooks. Open each link, paste the memo, set the GL and class if "now" differs, and attach the PDF. Tick the box when finished (saved in this browser).</caption>
-      <thead><tr><th class="up">Done<br><input type="checkbox" id="qb-all" title="Select / clear all"></th><th>QuickBooks</th><th>Date</th><th>Amount</th><th>USD (as in QuickBooks)</th><th>Memo</th><th>GL account</th><th>Class</th><th>Receipt</th><th>Brex</th></tr></thead><tbody>${body}</tbody>`;
+      <thead><tr><th class="up">Done<br><input type="checkbox" id="qb-all" title="Select / clear all"></th><th>QuickBooks</th><th>Date</th><th>Amount</th><th>USD (as in QB)</th><th>Memo</th><th>GL account</th><th>Class</th><th>Receipt</th><th>Brex</th></tr></thead><tbody>${body}</tbody>`;
     $('table').querySelectorAll('.copy').forEach(btn => (btn.onclick = async () => {
       const ok = await copyText(btn.dataset.v);
       btn.innerHTML = ok ? ICON_CHECK : '!'; btn.classList.add(ok ? 'copied' : 'failed');
