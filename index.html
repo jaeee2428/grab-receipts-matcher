@@ -60,6 +60,7 @@
 
     <div class="actions">
       <button id="run" disabled>Match &amp; generate</button>
+      <button id="new-session" class="secondary" title="Clear the files and results and start a fresh session (saved sessions are kept)">New session</button>
       <span id="msg" class="muted"></span>
     </div>
 
@@ -96,6 +97,14 @@
     <h3>Push to Brex</h3>
     <div id="push-body"></div>
     <div class="actions" id="push-actions"></div>
+  </dialog>
+  <dialog id="new-dlg">
+    <h3>Start a new session?</h3>
+    <p class="muted">This clears the Grab and Brex files and the current results so you can start fresh. Saved sessions and your upload ticks are kept. Download the masterlist or save the session first if you want to keep this one.</p>
+    <div class="actions">
+      <button type="button" value="ok">Yes, start new</button>
+      <button type="button" value="cancel" class="secondary">Cancel</button>
+    </div>
   </dialog>
   <dialog id="rerun">
     <h3>Run matching again?</h3>

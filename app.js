@@ -663,6 +663,23 @@
   }));
   $('save-name').onkeydown = e => { if (e.key === 'Enter') $('save-dlg').querySelector('button[value=ok]').click(); };
   $('import-session').onchange = e => { if (e.target.files[0]) importSession(e.target.files[0]); e.target.value = ''; };
+  // New session: clears files, mapping and results (saved sessions and upload ticks stay)
+  function newSession() {
+    Object.assign(state, { grabFiles: [], grabs: [], brexRows: [], brexHeaders: [], brexName: '', map: {}, card: '1521', matches: [], rows: [],
+                           filter: 'All', hideUploaded: false, sessionId: null, sessionName: '' });
+    refreshGrab();
+    $('status-brex').textContent = 'No file yet'; $('status-brex').style.color = ''; $('drop-brex').classList.remove('done');
+    $('file-grab').value = ''; $('file-brex').value = '';
+    $('mapping').hidden = true; $('mapping').open = false; $('map-grid').innerHTML = '';
+    $('hide-up').checked = false;
+    $('table').innerHTML = ''; $('chips').innerHTML = ''; $('up-progress').innerHTML = '';
+    $('results').hidden = true; $('msg').textContent = '';
+    $('run').disabled = true;
+    renderSaveState(); renderSessions();
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+  $('new-session').onclick = () => { if (!state.grabFiles.length && !state.brexRows.length && !state.rows.length) return; $('new-dlg').showModal(); };
+  $('new-dlg').querySelectorAll('button').forEach(b => (b.onclick = () => { $('new-dlg').close(); if (b.value === 'ok') newSession(); }));
   renderSaveState();
   renderSessions();
 })();
