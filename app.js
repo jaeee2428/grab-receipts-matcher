@@ -423,18 +423,19 @@
   const needsReceipt = r => !String(r._b.receipt || '').trim() && r._b.amount > 0;
   // only charges that are missing a memo or a receipt; whatever Brex already has is never touched
   const pushable = () => state.rows.filter(r => r._b && r._b.id && PUSHABLE.has(r.Status) && r.Memo && !isUp(r) && (needsMemo(r) || needsReceipt(r)));
-  const PUSH_URL = 'https://belli.app.n8n.cloud/webhook/grab-brex-push'; // n8n workflow "Grab Receipts: Push to Brex" holds the Brex token
-  let pushPw = ''; // kept in memory only: gone on reload, never saved
+  const PUSH_BASE = 'https://belli.app.n8n.cloud/webhook/'; // n8n workflow "Grab Receipts: Push to Brex" holds the Brex token; the secret key you type is the last part of the address
+  const KEY_STORE = 'grab-push-key';
+  let pushKey = '';
+  try { pushKey = localStorage.getItem(KEY_STORE) || ''; } catch (e) { /* storage blocked */ }
   const b64 = buf => { let s = ''; const u = new Uint8Array(buf); for (let i = 0; i < u.length; i += 0x8000) s += String.fromCharCode.apply(null, u.subarray(i, i + 0x8000)); return btoa(s); };
 
   async function brexApi(body) {
     let r;
     try {
-      r = await fetch(PUSH_URL, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': pushPw }, body: JSON.stringify(body) });
+      r = await fetch(PUSH_BASE + encodeURIComponent(pushKey), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
     } catch (e) { throw new Error('Could not reach n8n (check the workflow is published and the site origin is allowed)'); }
     const j = await r.json().catch(() => ({}));
-    if (r.status === 404) throw Object.assign(new Error('Push webhook not found. Is the n8n workflow published?'), { status: 404 });
-    if (r.status === 403) throw Object.assign(new Error('Wrong username or password'), { status: 401 });
+    if (r.status === 404 || r.status === 403) throw Object.assign(new Error('Wrong push key (or the n8n workflow is not published).'), { status: 401 });
     if (!r.ok) throw Object.assign(new Error(j.error || j.message || `HTTP ${r.status}`), { status: r.status });
     return j;
   }
@@ -455,22 +456,24 @@
     let running = false;
 
     const askPassword = (err) => {
-      body.innerHTML = `<p class="muted">Enter the username and password you set for the n8n webhook (Basic Auth). They are only kept until you reload the page.</p>
-        <label>Username<input id="push-user" autocomplete="username"></label>
-        <label>Password<input id="push-pw" type="password" autocomplete="current-password"></label>${err ? `<p class="push-warn">${esc(err)}</p>` : ''}`;
+      body.innerHTML = `<p class="muted">Enter the push key (the secret part of the n8n webhook address). Without it, the page cannot reach Brex.</p>
+        <label>Push key<input id="push-pw" type="password" autocomplete="off"></label>
+        <label class="inline"><input type="checkbox" id="push-rem"> Remember on this computer</label>${err ? `<p class="push-warn">${esc(err)}</p>` : ''}`;
       setActions([['Continue', 'push-go'], ['Cancel', 'push-cancel', 'secondary']]);
       $('push-cancel').onclick = close;
       const go = async () => {
-        const u = $('push-user').value, p = $('push-pw').value;
-        if (!u) return $('push-user').focus();
-        if (!p) return $('push-pw').focus();
-        pushPw = 'Basic ' + btoa(unescape(encodeURIComponent(`${u}:${p}`)));
-        try { await brexApi({ action: 'ping' }); preview(); }
-        catch (e) { pushPw = ''; askPassword(e.status === 401 ? 'Wrong username or password.' : e.message); }
+        const k = $('push-pw').value.trim();
+        if (!k) return $('push-pw').focus();
+        pushKey = k;
+        try {
+          await brexApi({ action: 'ping' });
+          try { if ($('push-rem').checked) localStorage.setItem(KEY_STORE, k); } catch (e) { /* storage blocked */ }
+          preview();
+        } catch (e) { pushKey = ''; askPassword(e.status === 401 ? e.message : e.message); }
       };
       $('push-go').onclick = go;
       $('push-pw').onkeydown = e => { if (e.key === 'Enter') go(); };
-      $('push-user').focus();
+      $('push-pw').focus();
     };
 
     const preview = async () => {
@@ -528,7 +531,7 @@
 
     dlg.onclose = () => { if (!running) renderResults(); };
     dlg.showModal();
-    pushPw ? preview() : askPassword();
+    pushKey ? preview() : askPassword();
   }
   $('push-brex').onclick = openPush;
 

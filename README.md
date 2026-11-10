@@ -49,7 +49,7 @@ Nothing is uploaded anywhere. Saved sessions and upload ticks live in the browse
 
 ## Push to Brex (through n8n)
 **Push to Brex…** sends each matched charge to the n8n workflow **Grab Receipts: Push to Brex** (`https://belli.app.n8n.cloud/webhook/grab-brex-push`). n8n holds the Brex token in its own credential, so **no secret lives in this repo or on Vercel**. The workflow writes a memo and uploads the receipt PDF only when the expense has none. It never overwrites or deletes. Class and GL account are not in the Brex API, so they stay copy-and-paste.
-- The page asks for the webhook username and password once per page load (n8n Basic Auth, sent as an `Authorization: Basic` header). They are kept in memory only.
+- The page asks for a **push key**: the long random last part of the n8n webhook address (`https://belli.app.n8n.cloud/webhook/<key>`). The workflow has no n8n login; without the key the address doesn't exist (404). You can tick "Remember on this computer" to keep it in this browser. Do not put the key in the repo.
 - Only Matched, Split and Combined rows are pushed; Review rows never are. Use "Test with 1 charge" first.
 - **Never commit a token or password.** `.gitignore` blocks `.env*`, `*token*`, keys and `.vercel`. The repo is public.
 - `vercel.json` adds security headers (CSP allows only this site, cdnjs and the n8n host).
