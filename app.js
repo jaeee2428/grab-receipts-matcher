@@ -125,6 +125,53 @@
     : ['Unmatched Brex', 'Unmatched Grab'].includes(s) ? 's-bad'
     : s.startsWith('Review') ? 's-warn' : 's-all';
 
+
+  /* ---------- QuickBooks to-do table: for adding memo, GL, class and receipt in QuickBooks by hand (open the ERP link) ---------- */
+  const QB_KEY = 'grab-receipts-qb-done';
+  state.qbDone = (() => { try { return JSON.parse(localStorage.getItem(QB_KEY) || '{}'); } catch (e) { return {}; } })();
+  const saveQbDone = () => { try { localStorage.setItem(QB_KEY, JSON.stringify(state.qbDone)); } catch (e) { /* storage blocked */ } };
+  const qbNorm = v => String(v || '').replace(/^\[|\]$/g, '').trim().toLowerCase();
+
+  function renderQbTable() {
+    const rows = state.rows.filter(isQbTodo);
+    const done = rows.filter(r => state.qbDone[qbTxnId(r['Integration ERP'])]).length;
+    const copy = v => v ? `<span class="cv">${esc(v)}<button class="copy" data-v="${esc(v)}" title="Copy" aria-label="Copy">${ICON_COPY}</button></span>` : '';
+    const body = rows.map(r => {
+      const id = qbTxnId(r['Integration ERP']), isDone = !!state.qbDone[id];
+      const glNow = r['Current Brex GL'], clsNow = r._b.cls || '';
+      const glFix = qbNorm(r['GL Account']) !== qbNorm(glNow), clsFix = qbNorm(r.Class) !== qbNorm(clsNow);
+      const m = state.matches[r._m];
+      return `<tr class="${isDone ? 'is-up' : ''}">
+        <td class="up"><input type="checkbox" class="qbchk" data-k="${esc(id)}" ${isDone ? 'checked' : ''} title="Mark as done in QuickBooks"></td>
+        <td><a href="${esc(r['Integration ERP'])}" target="_blank" rel="noopener">open in QuickBooks</a><br><span class="muted">#${esc(id)}</span></td>
+        <td>${esc(r.Date)}</td>
+        <td class="num">${esc(typeof r['Purchased Amount'] === 'number' ? r['Purchased Amount'].toLocaleString('en-US') : r['Purchased Amount'])} ${esc(r['Purchased Currency'])}</td>
+        <td>${copy(r.Memo)}</td>
+        <td>${copy(r['GL Account'])}${glFix ? `<br><span class="pill s-warn">now: ${esc(glNow || 'empty')}</span>` : '<br><span class="muted">already right</span>'}</td>
+        <td>${copy(r.Class)}${clsFix ? `<br><span class="pill s-warn">now: ${esc(clsNow || 'empty')}</span>` : '<br><span class="muted">already right</span>'}</td>
+        <td>${m.grabs.map((g, j) => `<button class="link-btn" data-m="${r._m}" data-g="${j}">PDF</button>`).join(' ')}</td>
+        <td><a href="${esc(r['Brex Dashboard'])}" target="_blank" rel="noopener">Brex</a>${isUp(r) ? ' <span class="muted">✓ pushed</span>' : ''}</td>
+      </tr>`;
+    }).join('');
+    $('table').innerHTML = `<caption style="text-align:left;padding:8px 12px"><strong>${done}</strong> of ${rows.length} done in QuickBooks. Open each link, paste the memo, set the GL and class if "now" differs, and attach the PDF. Tick the box when finished (saved in this browser).</caption>
+      <thead><tr><th class="up">Done</th><th>QuickBooks</th><th>Date</th><th>Amount</th><th>Memo</th><th>GL account</th><th>Class</th><th>Receipt</th><th>Brex</th></tr></thead><tbody>${body}</tbody>`;
+    $('table').querySelectorAll('.copy').forEach(btn => (btn.onclick = async () => {
+      const ok = await copyText(btn.dataset.v);
+      btn.innerHTML = ok ? ICON_CHECK : '!'; btn.classList.add(ok ? 'copied' : 'failed');
+      setTimeout(() => { btn.innerHTML = ICON_COPY; btn.classList.remove('copied', 'failed'); }, 1200);
+    }));
+    $('table').querySelectorAll('.qbchk').forEach(cb => (cb.onchange = () => {
+      if (cb.checked) state.qbDone[cb.dataset.k] = new Date().toISOString(); else delete state.qbDone[cb.dataset.k];
+      saveQbDone();
+      cb.closest('tr').classList.toggle('is-up', cb.checked);
+      $('table').querySelector('caption strong').textContent = rows.filter(r => state.qbDone[qbTxnId(r['Integration ERP'])]).length;
+    }));
+    $('table').querySelectorAll('.link-btn').forEach(b => (b.onclick = () => {
+      const g = state.matches[+b.dataset.m].grabs[+b.dataset.g];
+      R.buildReceipt(g).save(R.receiptFileName(g));
+    }));
+  }
+
   /* ---------- Upload tracking: a tick per Brex charge, remembered by expense ID across sessions ---------- */
   const UP_KEY = 'grab-receipts-uploaded';
   state.uploaded = (() => { try { return JSON.parse(localStorage.getItem(UP_KEY) || '{}'); } catch (e) { return {}; } })();
@@ -162,6 +209,7 @@
       `<span class="chip ${k === 'All' ? 's-all' : k === 'QuickBooks to-do' ? 's-split' : statusClass(k)} ${state.filter === k ? 'active' : ''}" data-k="${esc(k)}">${esc(k)}: ${v}</span>`).join('');
     $('chips').querySelectorAll('.chip').forEach(c => (c.onclick = () => { state.filter = c.dataset.k; renderResults(); }));
     renderProgress();
+    if (state.filter === 'QuickBooks to-do') return renderQbTable();
 
     const cols = visibleCols(state.rows);
     const linkCell = v => v ? v.split(' | ').map(u => `<a href="${esc(u)}" target="_blank" rel="noopener">open</a>`).join(' · ') : '';
