@@ -132,6 +132,7 @@
   const saveQbDone = () => { try { localStorage.setItem(QB_KEY, JSON.stringify(state.qbDone)); } catch (e) { /* storage blocked */ } };
   const qbNorm = v => String(v || '').replace(/^\[|\]$/g, '').trim().toLowerCase();
 
+  const usdFmt = v => (v === '' || v === null || v === undefined || isNaN(+v)) ? '<span class="muted">n/a</span>' : '$' + Math.abs(+v).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + (+v < 0 ? ' <span class="muted">(credit)</span>' : '');
   function renderQbTable() {
     const rows = state.rows.filter(isQbTodo);
     const done = rows.filter(r => state.qbDone[qbTxnId(r['Integration ERP'])]).length;
@@ -146,6 +147,7 @@
         <td><a href="${esc(r['Integration ERP'])}" target="_blank" rel="noopener">open in QuickBooks</a><br><span class="muted">#${esc(id)}</span></td>
         <td>${esc(r.Date)}</td>
         <td class="num">${esc(typeof r['Purchased Amount'] === 'number' ? r['Purchased Amount'].toLocaleString('en-US') : r['Purchased Amount'])} ${esc(r['Purchased Currency'])}</td>
+        <td class="num">${usdFmt(r['USD Amount'])}</td>
         <td>${copy(r.Memo)}</td>
         <td>${copy(r['GL Account'])}${glFix ? `<br><span class="pill s-warn">now: ${esc(glNow || 'empty')}</span>` : '<br><span class="muted">already right</span>'}</td>
         <td>${copy(r.Class)}${clsFix ? `<br><span class="pill s-warn">now: ${esc(clsNow || 'empty')}</span>` : '<br><span class="muted">already right</span>'}</td>
@@ -154,18 +156,34 @@
       </tr>`;
     }).join('');
     $('table').innerHTML = `<caption style="text-align:left;padding:8px 12px"><strong>${done}</strong> of ${rows.length} done in QuickBooks. Open each link, paste the memo, set the GL and class if "now" differs, and attach the PDF. Tick the box when finished (saved in this browser).</caption>
-      <thead><tr><th class="up">Done</th><th>QuickBooks</th><th>Date</th><th>Amount</th><th>Memo</th><th>GL account</th><th>Class</th><th>Receipt</th><th>Brex</th></tr></thead><tbody>${body}</tbody>`;
+      <thead><tr><th class="up">Done<br><input type="checkbox" id="qb-all" title="Select / clear all"></th><th>QuickBooks</th><th>Date</th><th>Amount</th><th>USD (as in QuickBooks)</th><th>Memo</th><th>GL account</th><th>Class</th><th>Receipt</th><th>Brex</th></tr></thead><tbody>${body}</tbody>`;
     $('table').querySelectorAll('.copy').forEach(btn => (btn.onclick = async () => {
       const ok = await copyText(btn.dataset.v);
       btn.innerHTML = ok ? ICON_CHECK : '!'; btn.classList.add(ok ? 'copied' : 'failed');
       setTimeout(() => { btn.innerHTML = ICON_COPY; btn.classList.remove('copied', 'failed'); }, 1200);
     }));
+    const all = $('qb-all');
+    const syncAll = () => {
+      const n = rows.filter(r => state.qbDone[qbTxnId(r['Integration ERP'])]).length;
+      $('table').querySelector('caption strong').textContent = n;
+      all.checked = n === rows.length && n > 0; all.indeterminate = n > 0 && n < rows.length;
+    };
     $('table').querySelectorAll('.qbchk').forEach(cb => (cb.onchange = () => {
       if (cb.checked) state.qbDone[cb.dataset.k] = new Date().toISOString(); else delete state.qbDone[cb.dataset.k];
       saveQbDone();
       cb.closest('tr').classList.toggle('is-up', cb.checked);
-      $('table').querySelector('caption strong').textContent = rows.filter(r => state.qbDone[qbTxnId(r['Integration ERP'])]).length;
+      syncAll();
     }));
+    all.onchange = () => {
+      const now = new Date().toISOString();
+      $('table').querySelectorAll('.qbchk').forEach(cb => {
+        cb.checked = all.checked;
+        if (all.checked) state.qbDone[cb.dataset.k] = state.qbDone[cb.dataset.k] || now; else delete state.qbDone[cb.dataset.k];
+        cb.closest('tr').classList.toggle('is-up', all.checked);
+      });
+      saveQbDone(); syncAll();
+    };
+    syncAll();
     $('table').querySelectorAll('.link-btn').forEach(b => (b.onclick = () => {
       const g = state.matches[+b.dataset.m].grabs[+b.dataset.g];
       R.buildReceipt(g).save(R.receiptFileName(g));
@@ -444,6 +462,7 @@
         Date: r.Date,
         Amount: r['Purchased Amount'],
         Currency: r['Purchased Currency'],
+        'USD Amount': r['USD Amount'],
         Memo: r.Memo,
         'Target GL': r['GL Account'],
         'Current GL': glNow,
