@@ -434,7 +434,7 @@
     } catch (e) { throw new Error('Could not reach n8n (check the workflow is published and the site origin is allowed)'); }
     const j = await r.json().catch(() => ({}));
     if (r.status === 404) throw Object.assign(new Error('Push webhook not found. Is the n8n workflow published?'), { status: 404 });
-    if (r.status === 403) throw Object.assign(new Error('Wrong password'), { status: 401 });
+    if (r.status === 403) throw Object.assign(new Error('Wrong username or password'), { status: 401 });
     if (!r.ok) throw Object.assign(new Error(j.error || j.message || `HTTP ${r.status}`), { status: r.status });
     return j;
   }
@@ -455,19 +455,22 @@
     let running = false;
 
     const askPassword = (err) => {
-      body.innerHTML = `<p class="muted">Enter the app password (set in Vercel as <code>APP_PASSWORD</code>). It is only kept until you reload the page.</p>
+      body.innerHTML = `<p class="muted">Enter the username and password you set for the n8n webhook (Basic Auth). They are only kept until you reload the page.</p>
+        <label>Username<input id="push-user" autocomplete="username"></label>
         <label>Password<input id="push-pw" type="password" autocomplete="current-password"></label>${err ? `<p class="push-warn">${esc(err)}</p>` : ''}`;
       setActions([['Continue', 'push-go'], ['Cancel', 'push-cancel', 'secondary']]);
       $('push-cancel').onclick = close;
       const go = async () => {
-        pushPw = $('push-pw').value;
-        if (!pushPw) return $('push-pw').focus();
+        const u = $('push-user').value, p = $('push-pw').value;
+        if (!u) return $('push-user').focus();
+        if (!p) return $('push-pw').focus();
+        pushPw = 'Basic ' + btoa(unescape(encodeURIComponent(`${u}:${p}`)));
         try { await brexApi({ action: 'ping' }); preview(); }
-        catch (e) { pushPw = ''; askPassword(e.status === 401 ? 'Wrong password.' : e.message); }
+        catch (e) { pushPw = ''; askPassword(e.status === 401 ? 'Wrong username or password.' : e.message); }
       };
       $('push-go').onclick = go;
       $('push-pw').onkeydown = e => { if (e.key === 'Enter') go(); };
-      $('push-pw').focus();
+      $('push-user').focus();
     };
 
     const preview = async () => {
