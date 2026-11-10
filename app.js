@@ -2,7 +2,7 @@
 (function () {
   const M = window.GrabMatch, R = window.GrabReceipt;
   const $ = id => document.getElementById(id);
-  const state = { grabFiles: [], grabs: [], brexRows: [], brexHeaders: [], brexName: '', map: {}, card: '1521', matches: [], rows: [], filter: 'All',
+  const state = { grabFiles: [], grabs: [], brexFiles: [], brexRows: [], brexHeaders: [], brexName: '', brexDupes: 0, map: {}, card: '1521', matches: [], rows: [], filter: 'All',
                   hideUploaded: false, sessionId: null, sessionName: '' };
 
   const FIELD_LABELS = { id: 'Expense ID', time: 'Swipe time (UTC)', date: 'Transaction date', amount: 'Purchased amount (original currency)',
@@ -57,19 +57,72 @@
     setStatus('grab', Object.entries(byCat).map(([c, k]) => `${k} ${c}`).join(' · ') + ` from ${n} file${n > 1 ? 's' : ''}. Drop more to add.`);
   }
 
-  /* ---------- Brex file ---------- */
-  function setBrex(name, rows, map) {
-    state.brexName = name;
-    state.brexRows = rows;
-    state.brexHeaders = rows.length ? Object.keys(rows[0]) : [];
-    state.map = map || M.autoMapBrex(state.brexHeaders);
-    renderMapping();
-    setStatus('brex', `${rows.length} transactions`);
+  /* ---------- Brex files (accumulate; every sheet is read; same file+sheet replaces) ---------- */
+  const brexKind = (headers, rows) => {
+    const erp = M.autoMapBrex(headers).erp;
+    return erp && rows.some(r => String(r[erp] ?? '').trim()) ? 'qb' : 'prep';
+  };
+  const KIND_LABEL = { qb: 'In QuickBooks', prep: 'Not in QB yet' };
+
+  // merge every Brex file/sheet into one list; a charge present in two files (same Expense ID) is kept once, preferring the copy with a QuickBooks link
+  function mergeBrex(prevMap) {
+    const files = state.brexFiles;
+    state.brexHeaders = [...new Set(files.flatMap(f => f.headers))];
+    const map = M.autoMapBrex(state.brexHeaders);
+    for (const [k, v] of Object.entries(prevMap || {})) if (v && state.brexHeaders.includes(v)) map[k] = v;
+    state.map = map;
+    const idH = map.id, erpH = map.erp, seen = new Map(), out = [];
+    state.brexDupes = 0;
+    for (const f of files) for (const r of f.rows) {
+      const id = idH ? String(r[idH] ?? '').trim() : '';
+      if (!id) { out.push(r); continue; }
+      if (!seen.has(id)) { seen.set(id, out.length); out.push(r); continue; }
+      state.brexDupes++;
+      const i = seen.get(id);
+      if (erpH && !String(out[i][erpH] ?? '').trim() && String(r[erpH] ?? '').trim()) out[i] = r;
+    }
+    state.brexRows = out;
+    state.brexName = files.map(f => f.name + (f.sheet ? ' · ' + f.sheet : '')).join(', ');
+    refreshBrex();
   }
 
-  async function loadBrex(file) {
-    const wb = await readWorkbook(file);
-    setBrex(file.name, XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { raw: true, defval: '' }));
+  function refreshBrex() {
+    const files = state.brexFiles;
+    $('brex-files').innerHTML = files.map((f, i) => `<li>
+        <span class="cat">${esc(KIND_LABEL[f.kind])}</span>
+        <span class="fname" title="${esc(f.name)}">${esc(f.name)}${f.sheet ? ' · ' + esc(f.sheet) : ''}</span>
+        <span class="muted">${f.rows.length} rows</span>
+        <button class="x" data-i="${i}" title="Remove">×</button></li>`).join('');
+    $('brex-files').querySelectorAll('.x').forEach(b => (b.onclick = () => { state.brexFiles.splice(+b.dataset.i, 1); mergeBrex(state.map); }));
+    if (!files.length) {
+      state.brexRows = []; state.brexHeaders = []; state.brexName = ''; state.map = {};
+      $('status-brex').textContent = 'No file yet'; $('status-brex').style.color = ''; $('drop-brex').classList.remove('done');
+      $('mapping').hidden = true; $('mapping').open = false; $('map-grid').innerHTML = '';
+      return;
+    }
+    renderMapping();
+    const erpH = state.map.erp;
+    const inQb = erpH ? state.brexRows.filter(r => String(r[erpH] ?? '').trim()).length : 0;
+    setStatus('brex', `${state.brexRows.length} transactions from ${files.length} file${files.length > 1 ? 's' : ''}: ${inQb} in QuickBooks, ${state.brexRows.length - inQb} not yet` +
+      (state.brexDupes ? ` (${state.brexDupes} duplicate${state.brexDupes > 1 ? 's' : ''} merged)` : '') + '. Drop more to add.');
+  }
+
+  function brexEntry(name, sheet, rows) {
+    const headers = rows.length ? Object.keys(rows[0]) : [];
+    return { name, sheet, headers, rows, kind: brexKind(headers, rows) };
+  }
+
+  async function loadBrex(files) {
+    for (const file of files) {
+      const wb = await readWorkbook(file);
+      for (const sn of wb.SheetNames) {
+        const rows = XLSX.utils.sheet_to_json(wb.Sheets[sn], { raw: true, defval: '' });
+        if (!rows.length) continue; // skip empty sheets
+        const sheet = wb.SheetNames.length > 1 ? sn : '';
+        state.brexFiles = state.brexFiles.filter(x => !(x.name === file.name && x.sheet === sheet)).concat(brexEntry(file.name, sheet, rows));
+      }
+    }
+    mergeBrex(state.map);
   }
 
   function setStatus(which, text, err) {
@@ -331,7 +384,8 @@
     return {
       id, name, savedAt: new Date().toISOString(), version: 1,
       grabFiles: state.grabFiles.filter(f => !f.error).map(f => ({ name: f.name, matrix: f.matrix })),
-      brex: { name: state.brexName, headers: state.brexHeaders, rows: state.brexRows.map(r => state.brexHeaders.map(h => r[h])) },
+      brex: { name: state.brexName, headers: state.brexHeaders, rows: state.brexRows.map(r => state.brexHeaders.map(h => r[h])) }, // merged copy, kept for older versions
+      brexFiles: state.brexFiles.map(f => ({ name: f.name, sheet: f.sheet, headers: f.headers, rows: f.rows.map(r => f.headers.map(h => r[h])) })),
       settings: { map: state.map, card: state.card, win: $('win').value, tpl: $('link-tpl').value },
       uploaded, stats: { total: keys.length, uploaded: Object.keys(uploaded).length },
     };
@@ -389,7 +443,10 @@
   function openSession(s) {
     state.grabFiles = s.grabFiles.map(f => grabEntry(f.name, f.matrix));
     refreshGrab();
-    setBrex(s.brex.name, s.brex.rows.map(a => Object.fromEntries(s.brex.headers.map((h, i) => [h, a[i]]))), s.settings.map);
+    const rowsOf = (headers, rows) => rows.map(a => Object.fromEntries(headers.map((h, i) => [h, a[i]])));
+    state.brexFiles = s.brexFiles ? s.brexFiles.map(f => brexEntry(f.name, f.sheet, rowsOf(f.headers, f.rows)))
+      : (s.brex && s.brex.rows.length ? [brexEntry(s.brex.name || 'Brex export', '', rowsOf(s.brex.headers, s.brex.rows))] : []);
+    mergeBrex(s.settings.map);
     state.card = s.settings.card ?? '1521';
     renderMapping();
     $('win').value = s.settings.win || 2;
@@ -512,7 +569,7 @@
   }
 
   wireDrop('grab', loadGrab);
-  wireDrop('brex', files => loadBrex(files[0]));
+  wireDrop('brex', loadBrex);
   // ask before replacing existing results
   $('run').onclick = () => {
     if (!state.rows.length) return run();
@@ -665,12 +722,11 @@
   $('import-session').onchange = e => { if (e.target.files[0]) importSession(e.target.files[0]); e.target.value = ''; };
   // New session: clears files, mapping and results (saved sessions and upload ticks stay)
   function newSession() {
-    Object.assign(state, { grabFiles: [], grabs: [], brexRows: [], brexHeaders: [], brexName: '', map: {}, card: '1521', matches: [], rows: [],
+    Object.assign(state, { grabFiles: [], grabs: [], brexFiles: [], brexRows: [], brexHeaders: [], brexName: '', brexDupes: 0, map: {}, card: '1521', matches: [], rows: [],
                            filter: 'All', hideUploaded: false, sessionId: null, sessionName: '' });
     refreshGrab();
-    $('status-brex').textContent = 'No file yet'; $('status-brex').style.color = ''; $('drop-brex').classList.remove('done');
+    refreshBrex();
     $('file-grab').value = ''; $('file-brex').value = '';
-    $('mapping').hidden = true; $('mapping').open = false; $('map-grid').innerHTML = '';
     $('hide-up').checked = false;
     $('table').innerHTML = ''; $('chips').innerHTML = ''; $('up-progress').innerHTML = '';
     $('results').hidden = true; $('msg').textContent = '';
