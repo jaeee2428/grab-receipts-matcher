@@ -34,13 +34,17 @@
         </label>
         <ul class="file-list" id="grab-files"></ul>
       </div>
-      <label class="drop" id="drop-brex">
-        <input type="file" id="file-brex" accept=".csv,.xlsx,.xls">
-        <span class="step">2</span>
-        <strong>Brex accounting export</strong>
-        <span class="hint">Optional. Leave it empty to get the PDFs and masterlist only.</span>
-        <span class="status" id="status-brex">No file yet</span>
-      </label>
+    
+      <div class="drop-col">
+        <label class="drop" id="drop-brex">
+          <input type="file" id="file-brex" accept=".csv,.xlsx,.xls" multiple>
+          <span class="step">2</span>
+          <strong>Brex accounting transactions</strong>
+          <span class="hint">Optional. Add one or multiple Brex export files. Leave empty to get the PDFs and masterlist only.</span>
+          <span class="status" id="status-brex">No file yet</span>
+        </label>
+        <ul class="file-list" id="brex-files"></ul>
+      </div>
     </section>
 
     <details id="mapping" hidden>
