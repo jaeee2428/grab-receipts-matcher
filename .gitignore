@@ -15,3 +15,4 @@ Brex_Transactions_*.csv
 *.key
 secrets.*
 *token*
+QuickBooks_todo_*.csv

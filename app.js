@@ -376,6 +376,32 @@
     XLSX.writeFile(wb, `Matched_Receipts_${new Date().toISOString().slice(0, 10)}.xlsx`);
   }
 
+  // Charges that already exist in QuickBooks (they have an ERP link): a to-do list for adding memo, GL, class and receipt there by hand
+  function qbTxnId(link) {
+    const m = String(link || '').match(/txnId=(\d+)/i) || String(link || '').match(/(\d{3,})(?!.*\d{3,})/);
+    return m ? m[1] : '';
+  }
+  function downloadQbList() {
+    const rows = state.rows.filter(r => r._b && r['Integration ERP'] && PUSHABLE.has(r.Status)).map(r => ({
+      'QuickBooks ID': qbTxnId(r['Integration ERP']),
+      'QuickBooks link': r['Integration ERP'],
+      Date: r.Date,
+      Amount: r['Purchased Amount'],
+      Currency: r['Purchased Currency'],
+      Memo: r.Memo,
+      'GL Account': r['GL Account'],
+      Class: r.Class,
+      'Receipt PDF': r['Receipt PDF'],
+      'Brex Dashboard': r['Brex Dashboard'],
+      'Pushed to Brex': isUp(r) ? 'yes' : 'no'
+    }));
+    if (!rows.length) return alert('No matched charges with a QuickBooks (ERP) link in these results.');
+    const ws = XLSX.utils.json_to_sheet(rows);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'QuickBooks to do');
+    XLSX.writeFile(wb, `QuickBooks_todo_${new Date().toISOString().slice(0, 10)}.csv`, { bookType: 'csv' });
+  }
+
   async function downloadZip() {
     const btn = $('dl-zip'); btn.disabled = true;
     const zip = new JSZip(), used = new Set();
@@ -485,7 +511,9 @@
         setActions([['Close', 'push-cancel', 'secondary']]); $('push-cancel').onclick = close; return;
       }
       const first = rows[0];
+      const qbN = rows.filter(r => r['Integration ERP']).length;
       body.innerHTML = `<p><strong>${rows.length}</strong> matched charge${rows.length === 1 ? '' : 's'} are missing a memo or a receipt and will get them from here${reviewN ? `. ${reviewN} Review/other rows are skipped.` : '.'}</p>
+        <p class="hint">${rows.length - qbN} have no QuickBooks link yet, so Brex is all they need. ${qbN} already exist in QuickBooks: this button does not touch QuickBooks. Use \"QuickBooks to-do (.csv)\" to get their memo, GL, class and receipt list for adding there.</p>
         <p class="hint">Only missing things are written. A memo or receipt Brex already has is left alone, and nothing is deleted.</p>
         <p class="hint">Class and GL account are not part of the Brex API (they come from QuickBooks), so copy those by hand.</p>
         <div id="push-first" class="muted">Reading the first charge from Brex…</div>`;
@@ -515,7 +543,7 @@
           const res = await pushOne(r);
           toggleUploaded(rowKey(r), true);
           ok++;
-          log('ok', `✓ ${r.Date} ${r['Purchased Amount']} ${r['Purchased Currency']}: memo ${res.memo}, ${res.receiptSkipped ? 'receipt already there' : res.receipts + ' receipt' + (res.receipts === 1 ? '' : 's') + ' added'}`);
+          log('ok', `✓ ${r.Date} ${r['Purchased Amount']} ${r['Purchased Currency']}: memo ${res.memo}, ${res.receiptSkipped ? 'receipt already there' : res.receipts + ' receipt' + (res.receipts === 1 ? '' : 's') + ' added'} · ${r['Integration ERP'] ? 'also needs QuickBooks update' : 'Brex only'}`);
         } catch (e) {
           fail++;
           log('err', `✗ ${r.Date} ${r['Purchased Amount']} ${r['Purchased Currency']}: ${e.message}`);
@@ -537,6 +565,7 @@
 
   $('dl-xlsx').onclick = downloadXlsx;
   $('dl-zip').onclick = downloadZip;
+  $('dl-qb').onclick = downloadQbList;
   $('hide-up').onchange = e => { state.hideUploaded = e.target.checked; renderResults(); };
 
   // Save: first time asks for a name; after that it updates the same session
